@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<InvariantGlobalization>true</InvariantGlobalization>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Domain\Payments\**" />
+	  <Content Remove="Domain\Payments\**" />
+	  <EmbeddedResource Remove="Domain\Payments\**" />
+	  <None Remove="Domain\Payments\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.6" />
+		<PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
+		<PackageReference Include="Riok.Mapperly" Version="3.5.1" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Domain\Guests\Mappings\" />
+		<Folder Include="Domain\Guests\Services\" />
+		<Folder Include="Domain\HotelRooms\Mappings\" />
+		<Folder Include="Domain\HotelRooms\Services\" />
+		<Folder Include="Domain\Hotels\Mappings\" />
+		<Folder Include="Domain\Hotels\Services\" />
+		<Folder Include="Domain\Reservations\Mappings\" />
+		<Folder Include="Domain\Reservations\Services\" />
+		<Folder Include="Domain\Rooms\Mappings\" />
+		<Folder Include="Domain\Rooms\Services\" />
+		<Folder Include="Services\" />
+	</ItemGroup>
+
+</Project>
