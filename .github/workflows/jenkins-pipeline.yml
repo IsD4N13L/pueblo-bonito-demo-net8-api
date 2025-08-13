@@ -23,13 +23,14 @@ jobs:
         
     - name: Setup WireGuard VPN
       run: |
-        echo "${{ secrets.WIREGUARD_PRIVATE_KEY }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+        # Usa el secreto con la configuración completa
+        echo "${{ secrets.WIREGUARD_CLIENT_CONF }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
         sudo chmod 600 /etc/wireguard/wg0.conf
         
         # Configurar la interfaz WireGuard
         sudo wg-quick up wg0
         
-        # Verificar conexión
+        # Verificar conexión (importante para depuración)
         sleep 5
         sudo wg show
         
