@@ -39,8 +39,10 @@ jobs:
     - name: Test WireGuard
       run: |
         sudo wg show
-        ping -c 3 10.0.0.1  # IP del servidor WireGuard
-        curl -v http://10.0.0.1:8080  # Acceso directo vía WireGuard
+        ip a
+        ip route
+        ping -c 3 10.0.0.1
+        curl -v http://10.0.0.1:8080
     - name: Validate VPN and Jenkins Connection
       run: |
         # Validar que la interfaz wg0 existe y está activa
