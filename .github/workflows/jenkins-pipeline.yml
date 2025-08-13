@@ -20,43 +20,43 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y wireguard-tools
-    - name: Setup WireGuard and test Jenkins
-      run: |
-        echo "[Interface]
-        PrivateKey = 4H82hqU43yvZULqMcHBIHK9WXqbi3K6s1COg5k/DD2M=
-        Address = 10.0.0.2/32
-        DNS = 8.8.8.8
+    # - name: Setup WireGuard and test Jenkins
+    #   run: |
+    #     echo "[Interface]
+    #     PrivateKey = 4H82hqU43yvZULqMcHBIHK9WXqbi3K6s1COg5k/DD2M=
+    #     Address = 10.0.0.2/32
+    #     DNS = 8.8.8.8
         
-        [Peer]
-        PublicKey = 5yibXLqu7oGt1j8n9IwCx0A0sDwidRNWdwXcU0t2CD8=
-        AllowedIPs = 10.0.0.0/24, 10.0.0.0/24
-        Endpoint = 100.27.192.192:51820
-        PersistentKeepalive = 25
-        " | sudo tee /etc/wireguard/wg0.conf > /dev/null
+    #     [Peer]
+    #     PublicKey = 5yibXLqu7oGt1j8n9IwCx0A0sDwidRNWdwXcU0t2CD8=
+    #     AllowedIPs = 10.0.0.0/24, 10.0.0.0/24
+    #     Endpoint = 100.27.192.192:51820
+    #     PersistentKeepalive = 25
+    #     " | sudo tee /etc/wireguard/wg0.conf > /dev/null
         
-        sudo chmod 600 /etc/wireguard/wg0.conf
-        sudo wg-quick up wg0
-        sleep 5
+    #     sudo chmod 600 /etc/wireguard/wg0.conf
+    #     sudo wg-quick up wg0
+    #     sleep 5
         
-        # Verificar que WireGuard esté funcionando
-        echo "WireGuard status:"
-        sudo wg show
+    #     # Verificar que WireGuard esté funcionando
+    #     echo "WireGuard status:"
+    #     sudo wg show
         
-        # Probar conectividad al servidor WireGuard
-        echo "Testing WireGuard server connectivity..."
-        ping -c 3 10.0.0.1
+    #     # Probar conectividad al servidor WireGuard
+    #     echo "Testing WireGuard server connectivity..."
+    #     ping -c 3 10.0.0.1
         
-        # Probar Jenkins
-        echo "Testing Jenkins..."
-        curl -I http://10.0.0.1:8080 --connect-timeout 10 --max-time 10
+    #     # Probar Jenkins
+    #     echo "Testing Jenkins..."
+    #     curl -I http://10.0.0.1:8080 --connect-timeout 10 --max-time 10
         
-        # Si Jenkins responde, continuar con el pipeline
-        if curl -s http://10.0.0.1:8080 >/dev/null 2>&1; then
-          echo "✅ Jenkins is accessible via WireGuard"
-        else
-          echo "❌ Jenkins is not accessible"
-          exit 1
-        fi
+    #     # Si Jenkins responde, continuar con el pipeline
+    #     if curl -s http://10.0.0.1:8080 >/dev/null 2>&1; then
+    #       echo "✅ Jenkins is accessible via WireGuard"
+    #     else
+    #       echo "❌ Jenkins is not accessible"
+    #       exit 1
+    #     fi
     # - name: Setup WireGuard VPN
     #   run: |
     #     # Usa el secreto con la configuración completa
@@ -72,6 +72,69 @@ jobs:
         
     #     # Test de conectividad al servidor Jenkins
     #     ping -c 3 ${{ secrets.JENKINS_INTERNAL_IP }} || echo "Ping failed, but continuing..."
+    - name: Setup WireGuard
+      run: |
+        echo "🔧 Installing WireGuard..."
+        sudo apt update
+        sudo apt install -y wireguard resolvconf
+        
+        echo "📝 Creating WireGuard configuration..."
+        echo "${{ secrets.WIREGUARD_CLIENT_CONF }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+        sudo chmod 600 /etc/wireguard/wg0.conf
+        
+        echo "🔍 Verifying configuration..."
+        sudo cat /etc/wireguard/wg0.conf
+        
+        echo "🚀 Starting WireGuard..."
+        sudo wg-quick up wg0
+        
+        echo "📊 WireGuard status:"
+        sudo wg show
+        
+        echo "🔍 Interface configuration:"
+        ip addr show wg0
+        
+        echo "🛣️ Routing table:"
+        ip route show | grep wg0
+
+    - name: Test WireGuard connectivity
+      run: |
+        echo "🧪 Testing WireGuard server connectivity..."
+        
+        # Test 1: Ping the WireGuard server IP
+        echo "Test 1: Ping WireGuard server (10.0.0.1)..."
+        if ping -c 3 -W 5 10.0.0.1; then
+            echo "✅ WireGuard server ping: SUCCESS"
+        else
+            echo "❌ WireGuard server ping: FAILED"
+            echo "🔍 Debugging information:"
+            echo "Current routes:"
+            ip route show
+            echo "ARP table:"
+            arp -a
+            echo "WireGuard interface stats:"
+            cat /proc/net/dev | grep wg0
+        fi
+        
+        # Test 2: Try to reach Jenkins internal IP
+        JENKINS_IP="${{ secrets.JENKINS_INTERNAL_IP }}"
+        echo "Test 2: Ping Jenkins internal IP ($JENKINS_IP)..."
+        if ping -c 3 -W 5 $JENKINS_IP; then
+            echo "✅ Jenkins server ping: SUCCESS"
+        else
+            echo "❌ Jenkins server ping: FAILED"
+        fi
+        
+        # Test 3: Test Jenkins HTTP connectivity
+        JENKINS_PORT="${{ secrets.JENKINS_PORT }}"
+        echo "Test 3: Test Jenkins HTTP connectivity..."
+        if timeout 10 curl -f -s "http://$JENKINS_IP:$JENKINS_PORT/api/json" > /dev/null; then
+            echo "✅ Jenkins HTTP connectivity: SUCCESS"
+        else
+            echo "❌ Jenkins HTTP connectivity: FAILED"
+            echo "Trying with verbose curl:"
+            timeout 10 curl -v "http://$JENKINS_IP:$JENKINS_PORT/api/json" || true
+        fi
     - name: Test WireGuard
       run: |
         sudo wg show
