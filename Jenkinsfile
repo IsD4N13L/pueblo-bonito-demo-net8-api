@@ -1,11 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        // Asumiendo que el SDK de .NET 8 fue instalado en el sistema
-        // y que Jenkins tiene acceso a él.
-        // Si necesitas una versión específica, configúrala en "Manage Jenkins" -> "Global Tool Configuration"
-    }
 
     stages {
         stage('Checkout Code') {
