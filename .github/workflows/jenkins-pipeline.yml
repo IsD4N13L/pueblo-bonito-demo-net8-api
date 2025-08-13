@@ -36,7 +36,11 @@ jobs:
         
         # Test de conectividad al servidor Jenkins
         ping -c 3 ${{ secrets.JENKINS_INTERNAL_IP }} || echo "Ping failed, but continuing..."
-        
+    - name: Test WireGuard
+      run: |
+        sudo wg show
+        ping -c 3 10.0.0.1  # IP del servidor WireGuard
+        curl -v http://10.0.0.1:8080  # Acceso directo vía WireGuard
     - name: Validate VPN and Jenkins Connection
       run: |
         # Validar que la interfaz wg0 existe y está activa
