@@ -29,7 +29,7 @@ jobs:
         [Peer]
         PublicKey = PM1Y6oVw9AIvO16QG7iPStwnjQ3veOF1uoz/DqZGTH0=
         Endpoint = 177.245.224.28:51820
-        AllowedIPs = 10.0.0.0/24, 10.0.2.0/24
+        AllowedIPs = 10.0.0.0/24, 10.0.2.0/24, 192.168.56.0/24
         PersistentKeepalive = 25" | sudo tee /etc/wireguard/wg0.conf > /dev/null
         
         sudo chmod 600 /etc/wireguard/wg0.conf
