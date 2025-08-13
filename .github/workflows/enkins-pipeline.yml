@@ -1,0 +1,185 @@
+# .github/workflows/jenkins-pipeline.yml
+name: Trigger Jenkins via WireGuard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  trigger-jenkins:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install WireGuard
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wireguard-tools
+        
+    - name: Setup WireGuard VPN
+      run: |
+        echo "${{ secrets.WIREGUARD_PRIVATE_KEY }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+        sudo chmod 600 /etc/wireguard/wg0.conf
+        
+        # Configurar la interfaz WireGuard
+        sudo wg-quick up wg0
+        
+        # Verificar conexión
+        sleep 5
+        sudo wg show
+        
+        # Test de conectividad al servidor Jenkins
+        ping -c 3 ${{ secrets.JENKINS_INTERNAL_IP }} || echo "Ping failed, but continuing..."
+        
+    - name: Wait for VPN connection
+      run: |
+        # Esperar hasta que la conexión esté estable
+        for i in {1..30}; do
+          if curl -s --connect-timeout 5 "http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}/login" > /dev/null; then
+            echo "Jenkins is reachable!"
+            break
+          else
+            echo "Attempt $i: Jenkins not reachable yet, waiting..."
+            sleep 2
+          fi
+        done
+
+    - name: Get PR/Branch info
+      id: get-info
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "is_pr=true" >> $GITHUB_OUTPUT
+          echo "branch_name=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+          echo "pr_number=${{ github.event.number }}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+        else
+          echo "is_pr=false" >> $GITHUB_OUTPUT
+          echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Trigger Jenkins Pipeline
+      id: jenkins-trigger
+      run: |
+        # Configurar variables
+        JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}"
+        JOB_NAME="${{ secrets.JENKINS_JOB_NAME }}"
+        
+        # Preparar parámetros para Jenkins
+        if [ "${{ steps.get-info.outputs.is_pr }}" = "true" ]; then
+          BUILD_PARAMS="BRANCH_NAME=${{ steps.get-info.outputs.branch_name }}&PR_NUMBER=${{ steps.get-info.outputs.pr_number }}&COMMIT_SHA=${{ steps.get-info.outputs.commit_sha }}&IS_PR=true"
+        else
+          BUILD_PARAMS="BRANCH_NAME=${{ steps.get-info.outputs.branch_name }}&COMMIT_SHA=${{ steps.get-info.outputs.commit_sha }}&IS_PR=false"
+        fi
+        
+        # Hacer la petición a Jenkins
+        RESPONSE=$(curl -s -w "%{http_code}" \
+          -X POST \
+          -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
+          "${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters" \
+          -d "${BUILD_PARAMS}")
+        
+        HTTP_CODE="${RESPONSE: -3}"
+        
+        if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ Jenkins pipeline triggered successfully!"
+          echo "jenkins_triggered=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Failed to trigger Jenkins pipeline. HTTP Code: $HTTP_CODE"
+          echo "jenkins_triggered=false" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+
+    - name: Get Jenkins Build Status
+      if: steps.jenkins-trigger.outputs.jenkins_triggered == 'true'
+      run: |
+        JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}"
+        JOB_NAME="${{ secrets.JENKINS_JOB_NAME }}"
+        
+        echo "Waiting for build to start..."
+        sleep 10
+        
+        # Obtener el último build number
+        BUILD_NUMBER=$(curl -s \
+          -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
+          "${JENKINS_URL}/job/${JOB_NAME}/lastBuild/buildNumber")
+        
+        echo "Monitoring build #${BUILD_NUMBER}..."
+        echo "Jenkins URL: ${JENKINS_URL}/job/${JOB_NAME}/${BUILD_NUMBER}/"
+        
+        # Monitorear el build por hasta 20 minutos
+        for i in {1..60}; do
+          BUILD_STATUS=$(curl -s \
+            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
+            "${JENKINS_URL}/job/${JOB_NAME}/${BUILD_NUMBER}/api/json" | \
+            python3 -c "import sys, json; data=json.load(sys.stdin); print(f'{data.get(\"building\", True)},{data.get(\"result\", \"UNKNOWN\")}')")
+          
+          IS_BUILDING=$(echo $BUILD_STATUS | cut -d',' -f1)
+          RESULT=$(echo $BUILD_STATUS | cut -d',' -f2)
+          
+          if [ "$IS_BUILDING" = "False" ]; then
+            echo "Build completed with result: $RESULT"
+            if [ "$RESULT" = "SUCCESS" ]; then
+              echo "✅ Jenkins pipeline completed successfully!"
+              exit 0
+            else
+              echo "❌ Jenkins pipeline failed with result: $RESULT"
+              exit 1
+            fi
+          else
+            echo "Build still running... (attempt $i/60)"
+            sleep 20
+          fi
+        done
+        
+        echo "⚠️ Build monitoring timeout reached"
+        exit 1
+
+    - name: Comment on PR (Success)
+      if: github.event_name == 'pull_request' && success()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const buildUrl = `http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}/job/${{ secrets.JENKINS_JOB_NAME }}/lastBuild/`;
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `✅ **Jenkins Pipeline Successful!**
+            
+            🚀 Build completed successfully for PR #${{ github.event.number }}
+            📋 Branch: \`${{ github.head_ref }}\`
+            🔗 [View Jenkins Build](${buildUrl})
+            📊 Commit: \`${{ github.event.pull_request.head.sha }}\``
+          });
+
+    - name: Comment on PR (Failure)
+      if: github.event_name == 'pull_request' && failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const buildUrl = `http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}/job/${{ secrets.JENKINS_JOB_NAME }}/lastBuild/`;
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `❌ **Jenkins Pipeline Failed!**
+            
+            🚨 Build failed for PR #${{ github.event.number }}
+            📋 Branch: \`${{ github.head_ref }}\`
+            🔗 [View Jenkins Build](${buildUrl})
+            📊 Commit: \`${{ github.event.pull_request.head.sha }}\`
+            
+            Please check the Jenkins logs for more details.`
+          });
+
+    - name: Cleanup WireGuard
+      if: always()
+      run: |
+        sudo wg-quick down wg0 || true
+        sudo rm -f /etc/wireguard/wg0.conf || true
