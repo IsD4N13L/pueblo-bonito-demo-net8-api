@@ -23,13 +23,13 @@ jobs:
     - name: Setup WireGuard and test Jenkins
       run: |
         echo "[Interface]
-        PrivateKey = ${{ secrets.WIREGUARD_PRIVATE_KEY }}
+        PrivateKey = +MTGxmWhuWB8m3FzTZLJISc6UWUeEoCB4OSmk9IoDHA=
         Address = 10.0.0.2/32
         
         [Peer]
         PublicKey = PM1Y6oVw9AIvO16QG7iPStwnjQ3veOF1uoz/DqZGTH0=
         Endpoint = 177.245.224.28:51820
-        AllowedIPs = 10.0.0.0/24
+        AllowedIPs = 10.0.0.0/24, 10.0.2.0/24
         PersistentKeepalive = 25" | sudo tee /etc/wireguard/wg0.conf > /dev/null
         
         sudo chmod 600 /etc/wireguard/wg0.conf
