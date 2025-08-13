@@ -20,22 +20,56 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y wireguard-tools
-        
-    - name: Setup WireGuard VPN
+    - name: Setup WireGuard and test Jenkins
       run: |
-        # Usa el secreto con la configuración completa
-        echo "${{ secrets.WIREGUARD_CLIENT_CONF }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+        echo "[Interface]
+        PrivateKey = ${{ secrets.WIREGUARD_PRIVATE_KEY }}
+        Address = 10.0.0.2/32
+        
+        [Peer]
+        PublicKey = PM1Y6oVw9AIvO16QG7iPStwnjQ3veOF1uoz/DqZGTH0=
+        Endpoint = 177.245.224.28:51820
+        AllowedIPs = 10.0.0.0/24
+        PersistentKeepalive = 25" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+        
         sudo chmod 600 /etc/wireguard/wg0.conf
-        
-        # Configurar la interfaz WireGuard
         sudo wg-quick up wg0
-        
-        # Verificar conexión (importante para depuración)
         sleep 5
+        
+        # Verificar que WireGuard esté funcionando
+        echo "WireGuard status:"
         sudo wg show
         
-        # Test de conectividad al servidor Jenkins
-        ping -c 3 ${{ secrets.JENKINS_INTERNAL_IP }} || echo "Ping failed, but continuing..."
+        # Probar conectividad al servidor WireGuard
+        echo "Testing WireGuard server connectivity..."
+        ping -c 3 10.0.0.1
+        
+        # Probar Jenkins
+        echo "Testing Jenkins..."
+        curl -I http://10.0.0.1:8080 --connect-timeout 10 --max-time 10
+        
+        # Si Jenkins responde, continuar con el pipeline
+        if curl -s http://10.0.0.1:8080 >/dev/null 2>&1; then
+          echo "✅ Jenkins is accessible via WireGuard"
+        else
+          echo "❌ Jenkins is not accessible"
+          exit 1
+        fi
+    # - name: Setup WireGuard VPN
+    #   run: |
+    #     # Usa el secreto con la configuración completa
+    #     echo "${{ secrets.WIREGUARD_CLIENT_CONF }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+    #     sudo chmod 600 /etc/wireguard/wg0.conf
+        
+    #     # Configurar la interfaz WireGuard
+    #     sudo wg-quick up wg0
+        
+    #     # Verificar conexión (importante para depuración)
+    #     sleep 5
+    #     sudo wg show
+        
+    #     # Test de conectividad al servidor Jenkins
+    #     ping -c 3 ${{ secrets.JENKINS_INTERNAL_IP }} || echo "Ping failed, but continuing..."
     - name: Test WireGuard
       run: |
         sudo wg show
