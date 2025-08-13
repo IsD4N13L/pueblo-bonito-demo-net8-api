@@ -37,18 +37,39 @@ jobs:
         # Test de conectividad al servidor Jenkins
         ping -c 3 ${{ secrets.JENKINS_INTERNAL_IP }} || echo "Ping failed, but continuing..."
         
-    - name: Wait for VPN connection
+    - name: Validate VPN and Jenkins Connection
       run: |
-        # Esperar hasta que la conexión esté estable
-        for i in {1..30}; do
-          if curl -s --connect-timeout 5 "http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}/login" > /dev/null; then
-            echo "Jenkins is reachable!"
-            break
+        # Validar que la interfaz wg0 existe y está activa
+        if ! sudo wg show wg0 &> /dev/null; then
+          echo "❌ Error: La interfaz wg0 no está activa. Revisa la configuración de WireGuard."
+          exit 1
+        fi
+        echo "✅ La interfaz wg0 de WireGuard está activa."
+        echo ""
+    
+        # Usar ping para una verificación de conectividad de bajo nivel
+        echo "Pingeando la IP interna de Jenkins (${{ secrets.JENKINS_INTERNAL_IP }})..."
+        if ping -c 3 -W 5 ${{ secrets.JENKINS_INTERNAL_IP }}; then
+          echo "✅ Ping exitoso a la IP interna de Jenkins."
+        else
+          echo "❌ Falló el ping a la IP interna de Jenkins."
+          exit 1
+        fi
+        echo ""
+    
+        # Bucle para esperar a que Jenkins esté disponible vía curl
+        echo "Esperando a que Jenkins responda..."
+        for i in {1..10}; do
+          if curl -s -f --connect-timeout 5 "http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}" > /dev/null; then
+            echo "✅ Jenkins respondió en http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}"
+            exit 0 # Salir con éxito si la conexión es exitosa
           else
-            echo "Attempt $i: Jenkins not reachable yet, waiting..."
-            sleep 2
+            echo "Intento $i: Jenkins no está disponible. Reintentando..."
+            sleep 5
           fi
         done
+        echo "❌ Falló la conexión a Jenkins después de varios intentos."
+        exit 1
 
     - name: Get PR/Branch info
       id: get-info
