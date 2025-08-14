@@ -180,12 +180,14 @@ jobs:
         JENKINS_REMOTE_TOKEN="${{ secrets.JENKINS_REMOTE_TOKEN}}"
         
         # Parámetros del job
-        BUILD_PARAMS="BUILD_NUMBER=${{ steps.build-info.outputs.build_number }}"
+        BUILD_PARAMS="PR_NUMBER=${{ steps.build-info.outputs.build_number }}"
         BUILD_PARAMS="${BUILD_PARAMS}&COMMIT_SHA=${{ steps.build-info.outputs.commit_sha }}"
-        BUILD_PARAMS="${BUILD_PARAMS}&BRANCH=${{ steps.build-info.outputs.branch }}"
+        BUILD_PARAMS="${BUILD_PARAMS}&BRANCH_NAME=${{ steps.build-info.outputs.branch }}"
         BUILD_PARAMS="${BUILD_PARAMS}&ENVIRONMENT=${{ steps.build-info.outputs.environment }}"
         BUILD_PARAMS="${BUILD_PARAMS}&GITHUB_RUN_ID=${{ github.run_id }}"
         BUILD_PARAMS="${BUILD_PARAMS}&TRIGGERED_BY=GitHub Actions"
+        BUILD_PARAMS="${BUILD_PARAMS}&IS_PR=true"
+        
         
         echo "🎯 Job: $JOB_NAME"
         echo "📋 Parámetros: $BUILD_PARAMS"
