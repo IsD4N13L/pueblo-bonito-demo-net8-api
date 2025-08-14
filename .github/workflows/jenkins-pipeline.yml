@@ -193,8 +193,8 @@ jobs:
         echo "📋 Parámetros: $BUILD_PARAMS"
         
         # Ejecutar job con parámetros
-        JENKINS_JOB_URL="${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters?token=${JENKINS_REMOTE_TOKEN}"
-        JENKINS_JOB_URL = "http://10.0.0.28:8080/job/pueblo-bonito-demo-net8-api/build?token=GITHUB_ACTIONS_TOKEN"
+        # JENKINS_JOB_URL="${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters?token=${JENKINS_REMOTE_TOKEN}"
+        JENKINS_JOB_URL = "http://10.0.0.28:8080/job/pueblo-bonito-demo-net8-api/buildWithParameters?token=GITHUB_ACTIONS_TOKEN"
         echo "JOB URL: ${JENKINS_JOB_URL}"
         
         echo "🚀 Disparando job de Jenkins..."
