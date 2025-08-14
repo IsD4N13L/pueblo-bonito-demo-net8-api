@@ -197,7 +197,7 @@ jobs:
         echo "JOB URL: ${JENKINS_JOB_URL}"
         
         echo "🚀 Disparando job de Jenkins..."
-        HTTP_CODE=$(curl -s -w "%{http_code}" \
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
           --user "${JENKINS_USER}:${JENKINS_TOKEN}" \
           --data "$BUILD_PARAMS" \
           --output /tmp/jenkins_response.txt \
