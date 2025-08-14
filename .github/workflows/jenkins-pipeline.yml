@@ -1,312 +1,306 @@
-# .github/workflows/jenkins-pipeline.yml
-name: Trigger Jenkins via WireGuard
+name: 🚀 Deploy via OpenVPN to Jenkins
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    branches: [ main, develop ]
   push:
     branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      jenkins_job:
+        description: 'Nombre del job de Jenkins a ejecutar'
+        required: false
+        default: 'default-build-job'
+      environment:
+        description: 'Ambiente de despliegue'
+        required: false
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  # Variables de configuración
+  OPENVPN_TIMEOUT: 30
+  JENKINS_TIMEOUT: 300
+  MAX_RETRIES: 3
 
 jobs:
-  trigger-jenkins:
+  deploy:
+    name: 🔐 Deploy via OpenVPN
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     
     steps:
-    - name: Checkout code
+    # 1. Checkout del código
+    - name: 📥 Checkout Code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-    - name: Install WireGuard
+    # 2. Configurar información del build
+    - name: 📋 Set Build Info
+      id: build-info
       run: |
-        sudo apt-get update
-        sudo apt-get install -y wireguard-tools
-    # - name: Setup WireGuard and test Jenkins
-    #   run: |
-    #     echo "[Interface]
-    #     PrivateKey = 4H82hqU43yvZULqMcHBIHK9WXqbi3K6s1COg5k/DD2M=
-    #     Address = 10.0.0.2/32
-    #     DNS = 8.8.8.8
+        echo "build_number=${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+        echo "commit_sha=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
+        echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+        echo "timestamp=$(date -u +%Y%m%d_%H%M%S)" >> $GITHUB_OUTPUT
         
-    #     [Peer]
-    #     PublicKey = 5yibXLqu7oGt1j8n9IwCx0A0sDwidRNWdwXcU0t2CD8=
-    #     AllowedIPs = 10.0.0.0/24, 10.0.0.0/24
-    #     Endpoint = 100.27.192.192:51820
-    #     PersistentKeepalive = 25
-    #     " | sudo tee /etc/wireguard/wg0.conf > /dev/null
-        
-    #     sudo chmod 600 /etc/wireguard/wg0.conf
-    #     sudo wg-quick up wg0
-    #     sleep 5
-        
-    #     # Verificar que WireGuard esté funcionando
-    #     echo "WireGuard status:"
-    #     sudo wg show
-        
-    #     # Probar conectividad al servidor WireGuard
-    #     echo "Testing WireGuard server connectivity..."
-    #     ping -c 3 10.0.0.1
-        
-    #     # Probar Jenkins
-    #     echo "Testing Jenkins..."
-    #     curl -I http://10.0.0.1:8080 --connect-timeout 10 --max-time 10
-        
-    #     # Si Jenkins responde, continuar con el pipeline
-    #     if curl -s http://10.0.0.1:8080 >/dev/null 2>&1; then
-    #       echo "✅ Jenkins is accessible via WireGuard"
-    #     else
-    #       echo "❌ Jenkins is not accessible"
-    #       exit 1
-    #     fi
-    # - name: Setup WireGuard VPN
-    #   run: |
-    #     # Usa el secreto con la configuración completa
-    #     echo "${{ secrets.WIREGUARD_CLIENT_CONF }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
-    #     sudo chmod 600 /etc/wireguard/wg0.conf
-        
-    #     # Configurar la interfaz WireGuard
-    #     sudo wg-quick up wg0
-        
-    #     # Verificar conexión (importante para depuración)
-    #     sleep 5
-    #     sudo wg show
-        
-    #     # Test de conectividad al servidor Jenkins
-    #     ping -c 3 ${{ secrets.JENKINS_INTERNAL_IP }} || echo "Ping failed, but continuing..."
-    - name: Setup WireGuard
+        # Determinar el job de Jenkins basado en la rama
+        if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          echo "jenkins_job=production-deploy" >> $GITHUB_OUTPUT
+          echo "environment=production" >> $GITHUB_OUTPUT
+        elif [ "${{ github.ref }}" == "refs/heads/develop" ]; then
+          echo "jenkins_job=staging-deploy" >> $GITHUB_OUTPUT  
+          echo "environment=staging" >> $GITHUB_OUTPUT
+        else
+          echo "jenkins_job=${{ github.event.inputs.jenkins_job || 'feature-build' }}" >> $GITHUB_OUTPUT
+          echo "environment=${{ github.event.inputs.environment || 'staging' }}" >> $GITHUB_OUTPUT
+        fi
+
+    # 3. Mostrar información del despliegue
+    - name: 📊 Display Deployment Info
       run: |
-        echo "🔧 Installing WireGuard..."
+        echo "🔧 **Información del Despliegue**"
+        echo "================================"
+        echo "🌟 Branch: ${{ steps.build-info.outputs.branch }}"
+        echo "🏗️ Build: #${{ steps.build-info.outputs.build_number }}"
+        echo "📦 Commit: ${{ steps.build-info.outputs.commit_sha }}"
+        echo "🎯 Environment: ${{ steps.build-info.outputs.environment }}"
+        echo "⚙️ Jenkins Job: ${{ steps.build-info.outputs.jenkins_job }}"
+        echo "🕐 Timestamp: ${{ steps.build-info.outputs.timestamp }}"
+        echo "================================"
+
+    # 4. Instalar OpenVPN
+    - name: 🔧 Install OpenVPN
+      run: |
+        echo "🔧 Instalando OpenVPN..."
         sudo apt update
-        sudo apt install -y wireguard resolvconf
-        
-        echo "📝 Creating WireGuard configuration..."
-        echo "${{ secrets.WIREGUARD_CLIENT_CONF }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
-        sudo chmod 600 /etc/wireguard/wg0.conf
-        
-        echo "🔍 Verifying configuration..."
-        sudo cat /etc/wireguard/wg0.conf
-        
-        echo "🚀 Starting WireGuard..."
-        sudo wg-quick up wg0
-        
-        echo "📊 WireGuard status:"
-        sudo wg show
-        
-        echo "🔍 Interface configuration:"
-        ip addr show wg0
-        
-        echo "🛣️ Routing table:"
-        ip route show | grep wg0
+        sudo apt install -y openvpn openvpn-systemd-resolved
+        echo "✅ OpenVPN instalado correctamente"
 
-    - name: Test WireGuard connectivity
+    # 5. Configurar cliente OpenVPN
+    - name: 🔐 Setup OpenVPN Client
       run: |
-        echo "🧪 Testing WireGuard server connectivity..."
+        echo "🔐 Configurando cliente OpenVPN..."
         
-        # Test 1: Ping the WireGuard server IP
-        echo "Test 1: Ping WireGuard server (10.0.0.1)..."
-        if ping -c 3 -W 5 10.0.0.1; then
-            echo "✅ WireGuard server ping: SUCCESS"
-        else
-            echo "❌ WireGuard server ping: FAILED"
-            echo "🔍 Debugging information:"
-            echo "Current routes:"
-            ip route show
-            echo "ARP table:"
-            arp -a
-            echo "WireGuard interface stats:"
-            cat /proc/net/dev | grep wg0
-        fi
+        # Crear directorio para configuración
+        sudo mkdir -p /etc/openvpn/client
         
-        # Test 2: Try to reach Jenkins internal IP
-        JENKINS_IP="${{ secrets.JENKINS_INTERNAL_IP }}"
-        echo "Test 2: Ping Jenkins internal IP ($JENKINS_IP)..."
-        if ping -c 3 -W 5 $JENKINS_IP; then
-            echo "✅ Jenkins server ping: SUCCESS"
-        else
-            echo "❌ Jenkins server ping: FAILED"
-        fi
+        # Crear archivo de configuración desde secret
+        echo "${{ secrets.OPENVPN_CLIENT_CONF }}" | sudo tee /etc/openvpn/client/client.conf > /dev/null
         
-        # Test 3: Test Jenkins HTTP connectivity
-        JENKINS_PORT="${{ secrets.JENKINS_PORT }}"
-        echo "Test 3: Test Jenkins HTTP connectivity..."
-        if timeout 10 curl -f -s "http://$JENKINS_IP:$JENKINS_PORT/api/json" > /dev/null; then
-            echo "✅ Jenkins HTTP connectivity: SUCCESS"
-        else
-            echo "❌ Jenkins HTTP connectivity: FAILED"
-            echo "Trying with verbose curl:"
-            timeout 10 curl -v "http://$JENKINS_IP:$JENKINS_PORT/api/json" || true
-        fi
-    - name: Test WireGuard
-      run: |
-        sudo wg show
-        ip a
-        ip route
-        ping -c 3 10.0.0.1
-        curl -v http://10.0.0.1:8080
-    - name: Validate VPN and Jenkins Connection
-      run: |
-        # Validar que la interfaz wg0 existe y está activa
-        if ! sudo wg show wg0 &> /dev/null; then
-          echo "❌ Error: La interfaz wg0 no está activa. Revisa la configuración de WireGuard."
+        # Verificar que la configuración se creó correctamente
+        if [ ! -s /etc/openvpn/client/client.conf ]; then
+          echo "❌ Error: Archivo de configuración OpenVPN vacío"
           exit 1
         fi
-        echo "✅ La interfaz wg0 de WireGuard está activa."
-        echo ""
-    
-        # Usar ping para una verificación de conectividad de bajo nivel
-        echo "Pingeando la IP interna de Jenkins (${{ secrets.JENKINS_INTERNAL_IP }})..."
-        if ping -c 3 -W 5 ${{ secrets.JENKINS_INTERNAL_IP }}; then
-          echo "✅ Ping exitoso a la IP interna de Jenkins."
-        else
-          echo "❌ Falló el ping a la IP interna de Jenkins."
-          exit 1
-        fi
-        echo ""
-    
-        # Bucle para esperar a que Jenkins esté disponible vía curl
-        echo "Esperando a que Jenkins responda..."
-        for i in {1..10}; do
-          if curl -s -f --connect-timeout 5 "http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}" > /dev/null; then
-            echo "✅ Jenkins respondió en http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}"
-            exit 0 # Salir con éxito si la conexión es exitosa
-          else
-            echo "Intento $i: Jenkins no está disponible. Reintentando..."
-            sleep 5
+        
+        # Mostrar información básica (sin exponer secrets)
+        echo "✅ Configuración OpenVPN creada"
+        echo "📄 Tamaño del archivo: $(wc -l < /etc/openvpn/client/client.conf) líneas"
+
+    # 6. Conectar a OpenVPN
+    - name: 🌐 Connect to OpenVPN
+      id: vpn-connect
+      run: |
+        echo "🌐 Conectando a OpenVPN..."
+        
+        # Iniciar OpenVPN en background
+        sudo openvpn --config /etc/openvpn/client/client.conf --daemon openvpn-client
+        
+        echo "⏳ Esperando conexión VPN..."
+        
+        # Esperar a que se establezca la conexión
+        RETRY_COUNT=0
+        VPN_CONNECTED=false
+        
+        while [ $RETRY_COUNT -lt $OPENVPN_TIMEOUT ]; do
+          if ip addr show tun0 >/dev/null 2>&1; then
+            VPN_IP=$(ip addr show tun0 | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
+            if [ ! -z "$VPN_IP" ]; then
+              echo "✅ VPN conectada con IP: $VPN_IP"
+              echo "vpn_ip=$VPN_IP" >> $GITHUB_OUTPUT
+              VPN_CONNECTED=true
+              break
+            fi
           fi
+          
+          echo "⏳ Intentando conexión... ($((RETRY_COUNT + 1))/$OPENVPN_TIMEOUT)"
+          sleep 1
+          RETRY_COUNT=$((RETRY_COUNT + 1))
         done
-        echo "❌ Falló la conexión a Jenkins después de varios intentos."
-        exit 1
-
-    - name: Get PR/Branch info
-      id: get-info
-      run: |
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          echo "is_pr=true" >> $GITHUB_OUTPUT
-          echo "branch_name=${{ github.head_ref }}" >> $GITHUB_OUTPUT
-          echo "pr_number=${{ github.event.number }}" >> $GITHUB_OUTPUT
-          echo "commit_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
-        else
-          echo "is_pr=false" >> $GITHUB_OUTPUT
-          echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
-          echo "commit_sha=${{ github.sha }}" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Trigger Jenkins Pipeline
-      id: jenkins-trigger
-      run: |
-        # Configurar variables
-        JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}"
-        JOB_NAME="${{ secrets.JENKINS_JOB_NAME }}"
         
-        # Preparar parámetros para Jenkins
-        if [ "${{ steps.get-info.outputs.is_pr }}" = "true" ]; then
-          BUILD_PARAMS="BRANCH_NAME=${{ steps.get-info.outputs.branch_name }}&PR_NUMBER=${{ steps.get-info.outputs.pr_number }}&COMMIT_SHA=${{ steps.get-info.outputs.commit_sha }}&IS_PR=true"
-        else
-          BUILD_PARAMS="BRANCH_NAME=${{ steps.get-info.outputs.branch_name }}&COMMIT_SHA=${{ steps.get-info.outputs.commit_sha }}&IS_PR=false"
-        fi
-        
-        # Hacer la petición a Jenkins
-        RESPONSE=$(curl -s -w "%{http_code}" \
-          -X POST \
-          -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
-          "${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters" \
-          -d "${BUILD_PARAMS}")
-        
-        HTTP_CODE="${RESPONSE: -3}"
-        
-        if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
-          echo "✅ Jenkins pipeline triggered successfully!"
-          echo "jenkins_triggered=true" >> $GITHUB_OUTPUT
-        else
-          echo "❌ Failed to trigger Jenkins pipeline. HTTP Code: $HTTP_CODE"
-          echo "jenkins_triggered=false" >> $GITHUB_OUTPUT
+        if [ "$VPN_CONNECTED" = false ]; then
+          echo "❌ Error: No se pudo establecer conexión VPN"
+          echo "📋 Logs de OpenVPN:"
+          sudo journalctl -u openvpn-client --no-pager -n 20 || true
           exit 1
         fi
 
-    - name: Get Jenkins Build Status
-      if: steps.jenkins-trigger.outputs.jenkins_triggered == 'true'
+    # 7. Verificar conectividad a Jenkins
+    - name: 🔍 Test Jenkins Connectivity
       run: |
-        JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}"
-        JOB_NAME="${{ secrets.JENKINS_JOB_NAME }}"
+        echo "🔍 Verificando conectividad a Jenkins..."
         
-        echo "Waiting for build to start..."
+        JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT || '8080' }}"
+        
+        # Ping al servidor Jenkins
+        if ping -c 3 -W 3 ${{ secrets.JENKINS_INTERNAL_IP }} >/dev/null 2>&1; then
+          echo "✅ Ping a Jenkins exitoso"
+        else
+          echo "⚠️ Ping a Jenkins falló, pero continuando..."
+        fi
+        
+        # Verificar acceso HTTP a Jenkins
+        RETRY_COUNT=0
+        while [ $RETRY_COUNT -lt 5 ]; do
+          if curl -s --connect-timeout 10 --max-time 20 "$JENKINS_URL/api/json" >/dev/null 2>&1; then
+            echo "✅ Jenkins accesible en: $JENKINS_URL"
+            break
+          fi
+          
+          echo "⏳ Esperando acceso a Jenkins... ($((RETRY_COUNT + 1))/5)"
+          sleep 5
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+        done
+
+    # 8. Ejecutar Job de Jenkins
+    - name: ⚙️ Trigger Jenkins Job
+      id: jenkins-job
+      run: |
+        echo "⚙️ Ejecutando job de Jenkins..."
+        
+        JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT || '8080' }}"
+        JOB_NAME="${{ steps.build-info.outputs.jenkins_job }}"
+        JENKINS_USER="${{ secrets.JENKINS_USER }}"
+        JENKINS_TOKEN="${{ secrets.JENKINS_TOKEN }}"
+        
+        # Parámetros del job
+        BUILD_PARAMS="BUILD_NUMBER=${{ steps.build-info.outputs.build_number }}"
+        BUILD_PARAMS="${BUILD_PARAMS}&COMMIT_SHA=${{ steps.build-info.outputs.commit_sha }}"
+        BUILD_PARAMS="${BUILD_PARAMS}&BRANCH=${{ steps.build-info.outputs.branch }}"
+        BUILD_PARAMS="${BUILD_PARAMS}&ENVIRONMENT=${{ steps.build-info.outputs.environment }}"
+        BUILD_PARAMS="${BUILD_PARAMS}&GITHUB_RUN_ID=${{ github.run_id }}"
+        BUILD_PARAMS="${BUILD_PARAMS}&TRIGGERED_BY=GitHub Actions"
+        
+        echo "🎯 Job: $JOB_NAME"
+        echo "📋 Parámetros: $BUILD_PARAMS"
+        
+        # Ejecutar job con parámetros
+        JENKINS_JOB_URL="${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters"
+        
+        echo "🚀 Disparando job de Jenkins..."
+        HTTP_CODE=$(curl -s -w "%{http_code}" \
+          --user "${JENKINS_USER}:${JENKINS_TOKEN}" \
+          --data "$BUILD_PARAMS" \
+          --output /tmp/jenkins_response.txt \
+          "$JENKINS_JOB_URL")
+        
+        echo "📊 Código de respuesta HTTP: $HTTP_CODE"
+        
+        if [ "$HTTP_CODE" -eq 201 ] || [ "$HTTP_CODE" -eq 200 ]; then
+          echo "✅ Job de Jenkins disparado correctamente"
+          
+          # Obtener número de build de la queue
+          QUEUE_ID=$(curl -s \
+            --user "${JENKINS_USER}:${JENKINS_TOKEN}" \
+            "${JENKINS_URL}/job/${JOB_NAME}/api/json" | \
+            jq -r '.nextBuildNumber // empty')
+          
+          if [ ! -z "$QUEUE_ID" ] && [ "$QUEUE_ID" != "null" ]; then
+            BUILD_NUMBER=$((QUEUE_ID - 1))
+            echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+            echo "🔢 Número de build estimado: $BUILD_NUMBER"
+          fi
+        else
+          echo "❌ Error al disparar job de Jenkins"
+          echo "📋 Respuesta del servidor:"
+          cat /tmp/jenkins_response.txt || true
+          exit 1
+        fi
+
+    # 9. Monitorear progreso del job (opcional)
+    - name: 📊 Monitor Jenkins Job
+      if: success()
+      run: |
+        echo "📊 Monitoreando progreso del job..."
+        
+        JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT || '8080' }}"
+        JOB_NAME="${{ steps.build-info.outputs.jenkins_job }}"
+        JENKINS_USER="${{ secrets.JENKINS_USER }}"
+        JENKINS_TOKEN="${{ secrets.JENKINS_TOKEN }}"
+        
+        # Esperar un poco antes de empezar a monitorear
         sleep 10
         
-        # Obtener el último build number
-        BUILD_NUMBER=$(curl -s \
-          -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
-          "${JENKINS_URL}/job/${JOB_NAME}/lastBuild/buildNumber")
+        MONITOR_COUNT=0
+        MAX_MONITOR_TIME=30 # 5 minutos máximo
         
-        echo "Monitoring build #${BUILD_NUMBER}..."
-        echo "Jenkins URL: ${JENKINS_URL}/job/${JOB_NAME}/${BUILD_NUMBER}/"
-        
-        # Monitorear el build por hasta 20 minutos
-        for i in {1..60}; do
-          BUILD_STATUS=$(curl -s \
-            -u "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}" \
-            "${JENKINS_URL}/job/${JOB_NAME}/${BUILD_NUMBER}/api/json" | \
-            python3 -c "import sys, json; data=json.load(sys.stdin); print(f'{data.get(\"building\", True)},{data.get(\"result\", \"UNKNOWN\")}')")
+        while [ $MONITOR_COUNT -lt $MAX_MONITOR_TIME ]; do
+          # Obtener información del último build
+          JOB_INFO=$(curl -s \
+            --user "${JENKINS_USER}:${JENKINS_TOKEN}" \
+            "${JENKINS_URL}/job/${JOB_NAME}/lastBuild/api/json" 2>/dev/null || echo '{}')
           
-          IS_BUILDING=$(echo $BUILD_STATUS | cut -d',' -f1)
-          RESULT=$(echo $BUILD_STATUS | cut -d',' -f2)
+          BUILD_RESULT=$(echo "$JOB_INFO" | jq -r '.result // empty')
+          BUILD_NUMBER=$(echo "$JOB_INFO" | jq -r '.number // empty')
+          IS_BUILDING=$(echo "$JOB_INFO" | jq -r '.building // false')
           
-          if [ "$IS_BUILDING" = "False" ]; then
-            echo "Build completed with result: $RESULT"
-            if [ "$RESULT" = "SUCCESS" ]; then
-              echo "✅ Jenkins pipeline completed successfully!"
-              exit 0
-            else
-              echo "❌ Jenkins pipeline failed with result: $RESULT"
-              exit 1
+          if [ ! -z "$BUILD_NUMBER" ] && [ "$BUILD_NUMBER" != "null" ]; then
+            if [ "$IS_BUILDING" = "true" ]; then
+              echo "⏳ Build #$BUILD_NUMBER en progreso..."
+            elif [ ! -z "$BUILD_RESULT" ] && [ "$BUILD_RESULT" != "null" ]; then
+              echo "🏁 Build #$BUILD_NUMBER completado con resultado: $BUILD_RESULT"
+              
+              if [ "$BUILD_RESULT" = "SUCCESS" ]; then
+                echo "✅ Job de Jenkins completado exitosamente"
+              else
+                echo "❌ Job de Jenkins falló con resultado: $BUILD_RESULT"
+              fi
+              break
             fi
-          else
-            echo "Build still running... (attempt $i/60)"
-            sleep 20
           fi
+          
+          sleep 10
+          MONITOR_COUNT=$((MONITOR_COUNT + 1))
         done
         
-        echo "⚠️ Build monitoring timeout reached"
-        exit 1
+        # URL del job para referencia
+        echo "🔗 URL del job: ${JENKINS_URL}/job/${JOB_NAME}/"
 
-    - name: Comment on PR (Success)
-      if: github.event_name == 'pull_request' && success()
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const buildUrl = `http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}/job/${{ secrets.JENKINS_JOB_NAME }}/lastBuild/`;
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: `✅ **Jenkins Pipeline Successful!**
-            
-            🚀 Build completed successfully for PR #${{ github.event.number }}
-            📋 Branch: \`${{ github.head_ref }}\`
-            🔗 [View Jenkins Build](${buildUrl})
-            📊 Commit: \`${{ github.event.pull_request.head.sha }}\``
-          });
-
-    - name: Comment on PR (Failure)
-      if: github.event_name == 'pull_request' && failure()
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const buildUrl = `http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT }}/job/${{ secrets.JENKINS_JOB_NAME }}/lastBuild/`;
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: `❌ **Jenkins Pipeline Failed!**
-            
-            🚨 Build failed for PR #${{ github.event.number }}
-            📋 Branch: \`${{ github.head_ref }}\`
-            🔗 [View Jenkins Build](${buildUrl})
-            📊 Commit: \`${{ github.event.pull_request.head.sha }}\`
-            
-            Please check the Jenkins logs for more details.`
-          });
-
-    - name: Cleanup WireGuard
+    # 10. Cleanup - Desconectar VPN
+    - name: 🧹 Cleanup OpenVPN
       if: always()
       run: |
-        sudo wg-quick down wg0 || true
-        sudo rm -f /etc/wireguard/wg0.conf || true
+        echo "🧹 Desconectando OpenVPN..."
+        
+        # Terminar proceso OpenVPN
+        sudo pkill -f "openvpn.*client.conf" || true
+        
+        # Limpiar archivos temporales
+        sudo rm -f /etc/openvpn/client/client.conf
+        
+        echo "✅ Cleanup completado"
+
+    # 11. Notificación de resultado
+    - name: 📢 Deployment Summary
+      if: always()
+      run: |
+        echo "📢 **RESUMEN DEL DESPLIEGUE**"
+        echo "============================"
+        echo "🌟 Branch: ${{ steps.build-info.outputs.branch }}"
+        echo "🏗️ Build: #${{ steps.build-info.outputs.build_number }}"
+        echo "🎯 Environment: ${{ steps.build-info.outputs.environment }}"
+        echo "⚙️ Jenkins Job: ${{ steps.build-info.outputs.jenkins_job }}"
+        
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Estado: EXITOSO"
+        else
+          echo "❌ Estado: FALLIDO"
+        fi
+        
+        echo "🕐 Tiempo total: ${{ job.status == 'success' && 'Completado' || 'Interrumpido' }}"
+        echo "============================"
