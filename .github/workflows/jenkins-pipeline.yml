@@ -193,7 +193,7 @@ jobs:
         echo "📋 Parámetros: $BUILD_PARAMS"
         
         # Ejecutar job con parámetros
-        JENKINS_JOB_URL="${JENKINS_URL}/job/${JOB_NAME}/build?token=${JENKINS_REMOTE_TOKEN}"
+        JENKINS_JOB_URL="${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters?token=${JENKINS_REMOTE_TOKEN}"
         echo "JOB URL: ${JENKINS_JOB_URL}"
         
         echo "🚀 Disparando job de Jenkins..."
@@ -202,7 +202,8 @@ jobs:
           --data "$BUILD_PARAMS" \
           --output /tmp/jenkins_response.txt \
           "$JENKINS_JOB_URL")
-        
+
+        cat /tmp/jenkins_response.txt
         echo "📊 Código de respuesta HTTP: $HTTP_CODE"
         
         if [ "$HTTP_CODE" -eq 201 ] || [ "$HTTP_CODE" -eq 200 ]; then
