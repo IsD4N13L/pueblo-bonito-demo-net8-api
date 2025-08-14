@@ -192,9 +192,10 @@ jobs:
         
         # Ejecutar job con parámetros
         JENKINS_JOB_URL="${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters?token=${JENKINS_REMOTE_TOKEN}"
+        echo "JOB URL: ${JENKINS_JOB_URL}"
         
         echo "🚀 Disparando job de Jenkins..."
-        HTTP_CODE=$(curl -s -w "%{http_code}" \
+        HTTP_CODE=$(curl -s -w -X POST \
           --user "${JENKINS_USER}:${JENKINS_TOKEN}" \
           --data "$BUILD_PARAMS" \
           --output /tmp/jenkins_response.txt \
