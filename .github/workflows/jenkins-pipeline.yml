@@ -177,6 +177,7 @@ jobs:
         JOB_NAME="${{ steps.build-info.outputs.jenkins_job }}"
         JENKINS_USER="${{ secrets.JENKINS_USER }}"
         JENKINS_TOKEN="${{ secrets.JENKINS_TOKEN }}"
+        JENKINS_REMOTE_TOKEN="${{ secrets.JENKINS_REMOTE_TOKEN}}"
         
         # Parámetros del job
         BUILD_PARAMS="BUILD_NUMBER=${{ steps.build-info.outputs.build_number }}"
@@ -190,7 +191,7 @@ jobs:
         echo "📋 Parámetros: $BUILD_PARAMS"
         
         # Ejecutar job con parámetros
-        JENKINS_JOB_URL="${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters"
+        JENKINS_JOB_URL="${JENKINS_URL}/job/${JOB_NAME}/buildWithParameters?token=${JENKINS_REMOTE_TOKEN}"
         
         echo "🚀 Disparando job de Jenkins..."
         HTTP_CODE=$(curl -s -w "%{http_code}" \
