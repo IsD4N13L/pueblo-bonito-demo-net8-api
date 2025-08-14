@@ -174,7 +174,7 @@ jobs:
         echo "⚙️ Ejecutando job de Jenkins..."
         
         JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT || '8080' }}"
-        JOB_NAME="${{ steps.build-info.outputs.jenkins_job }}"
+        JOB_NAME="${{ secrets.JENKINS_JOB_NAME }}"
         JENKINS_USER="${{ secrets.JENKINS_USER }}"
         JENKINS_TOKEN="${{ secrets.JENKINS_TOKEN }}"
         JENKINS_REMOTE_TOKEN="${{ secrets.JENKINS_REMOTE_TOKEN}}"
@@ -231,7 +231,7 @@ jobs:
         echo "📊 Monitoreando progreso del job..."
         
         JENKINS_URL="http://${{ secrets.JENKINS_INTERNAL_IP }}:${{ secrets.JENKINS_PORT || '8080' }}"
-        JOB_NAME="${{ steps.build-info.outputs.jenkins_job }}"
+        JOB_NAME="${{ secrets.JENKINS_JOB_NAME }}"
         JENKINS_USER="${{ secrets.JENKINS_USER }}"
         JENKINS_TOKEN="${{ secrets.JENKINS_TOKEN }}"
         
